@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0015">
+<title>星河回忆 · Starry Memories</title>
+<link rel="stylesheet" href="css/album.css">
+<script src="js/album-config.js"></script>
+<script src="js/album-db.js"></script>
+<script src="js/album-formations.js"></script>
+<script src="js/album-textures.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="logo">WXY</div>
+<div id="chapter-label"></div>
+<a id="admin-btn" href="admin.html" title="鍚庡彴绠＄悊" target="_blank">&#9881;</a>
+<button id="music-btn" title="闊充箰">&#128263;</button>
+<div id="photo-count-badge"></div>
+<div id="chapter-text"><p class="line"></p><p class="line"></p></div>
+<div id="controls">
+  <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+  <div id="chap-dots">
+    <button class="nav-arrow" id="prev-btn">&#9664;</button>
+    <div id="dots-container"></div>
+    <button class="nav-arrow" id="next-btn">&#9654;</button>
+  </div>
+  <button id="auto-btn">&#9654; 鑷姩鎾斁</button>
+</div>
+<div id="vignette"></div>
+<div id="modal">
+  <div id="modal-inner"><img id="modal-img" src="" alt=""><p id="modal-caption"></p></div>
+  <button id="modal-close">&#10005;</button>
+</div>
+<div id="loading"><span id="loading-text">&#10022; 姝ｅ湪涓轰綘鍑嗗鏄熸渤 &#10022;</span></div>
+
+<script type="module">
+import * as THREE from "three";
+window.THREE = THREE;
+
+var PHOTOS, CHAPTERS;
+var cardGroups=[], planeMats=[], scene, camera, renderer, stars, hearts;
+var currentChapter=0, isAutoPlaying=true, chapterStartTime=Date.now(), modalPhoto=null, isMusicOn=false;
+var raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2(), clock=new THREE.Clock();
+var targetCamPos=new THREE.Vector3(), targetLookAt=new THREE.Vector3();
+
+function hideLoading(){ document.getElementById("loading").classList.add("hidden"); }
+
+function updateFormation(){
+  var pos=getFormationPositions(CHAPTERS[currentChapter].formation, PHOTOS.length);
+  cardGroups.forEach(function(g,i){ var t=pos[i]||pos[0];
+    g.userData.targetPos.set(t.pos[0],t.pos[1],t.pos[2]);
+    g.userData.targetRot.set(t.rot[0],t.rot[1],t.rot[2]);
+    g.userData.targetScl=t.scl; });
+}
+
+function setChapter(idx){ currentChapter=(idx+CHAPTERS.length)%CHAPTERS.length; chapterStartTime=Date.now(); updateFormation(); updateUI(); }
+function resetAutoTimer(){ chapterStartTime=Date.now(); }
+
+function updateUI(){
+  var ch=CHAPTERS[currentChapter];
+  document.getElementById("chapter-label").textContent=ch.title;
+  var lines=document.getElementById("chapter-text").querySelectorAll(".line");
+  lines.forEach(function(l){ l.classList.remove("show"); });
+  ch.texts.forEach(function(t,i){ if(lines[i]) lines[i].textContent=t; });
+  for(var i=ch.texts.length;i<lines.length;i++){ if(lines[i]) lines[i].textContent=""; }
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    ch.texts.forEach(function(_,i){ setTimeout(function(){ if(lines[i]) lines[i].classList.add("show"); }, i*500+100); });
+  });});
+  var dc=document.getElementById("dots-container"); dc.innerHTML="";
+  CHAPTERS.forEach(function(c,i){ var d=document.createElement("button");
+    d.className=i===currentChapter?"dot active":"dot inactive";
+    d.onclick=function(){ setChapter(i); resetAutoTimer(); }; dc.appendChild(d); });
+  document.getElementById("auto-btn").textContent=isAutoPlaying?"鈴?鑷姩鎾斁涓?:"鈻?鑷姩鎾斁";
+}
+
+function openModal(photo){
+  modalPhoto=photo;
+  document.getElementById("modal-caption").textContent=photo.caption;
+  document.getElementById("modal").classList.add("open");
+  if(photo._modalSrc) document.getElementById("modal-img").src=photo._modalSrc;
+  else document.getElementById("modal-img").src=generatePlaceholderTexture(photo.id,photo.accent).source.data.toDataURL();
+}
+function closeModal(){ document.getElementById("modal").classList.remove("open"); modalPhoto=null; }
+
+function animate(){
+  requestAnimationFrame(animate);
+  var dt=Math.min(clock.getDelta(),0.1), lf=1-Math.exp(-dt*3);
+  stars.rotation.y+=dt*0.02; stars.rotation.x+=dt*0.01; hearts.rotation.y+=dt*0.04;
+
+  if(isAutoPlaying){
+    var elapsed=Date.now()-chapterStartTime;
+    document.getElementById("progress-fill").style.width=Math.min(elapsed/CHAPTER_DURATION*100,100)+"%";
+    if(elapsed>=CHAPTER_DURATION) setChapter(currentChapter+1);
+  }else{ document.getElementById("progress-fill").style.width="0%"; }
+
+  var ct=CAMERA_TARGETS[CHAPTERS[currentChapter].formation];
+  targetCamPos.set(ct.pos[0],ct.pos[1],ct.pos[2]); targetLookAt.set(ct.look[0],ct.look[1],ct.look[2]);
+  camera.position.lerp(targetCamPos,lf);
+  var dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+  var desired=targetLookAt.clone().sub(camera.position).normalize();
+  dir.lerp(desired,lf).normalize(); camera.lookAt(camera.position.clone().add(dir));
+
+  cardGroups.forEach(function(g){
+    var ud=g.userData;
+    g.position.lerp(ud.targetPos,lf);
+    g.rotation.x+=(ud.targetRot.x-g.rotation.x)*lf;
+    g.rotation.y+=(ud.targetRot.y-g.rotation.y)*lf;
+    g.rotation.z+=(ud.targetRot.z-g.rotation.z)*lf;
+    var s=ud.targetScl*(ud.hovered?1.12:1)*(ud.selected?0.3:1);
+    g.scale.lerp(new THREE.Vector3(s,s,s),lf);
+    if(ud.hovered&&!ud.selected) g.position.y+=Math.sin(Date.now()*0.004)*0.003;
+  });
+  renderer.render(scene,camera);
+}
+
+function initScene(){
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.2;
+  document.body.insertBefore(renderer.domElement,document.body.firstChild);
+
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,80);
+  camera.position.set(0,0,10);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x442244,0.3));
+  var pl1=new THREE.PointLight(0xff99cc,0.5,30); pl1.position.set(10,10,10); scene.add(pl1);
+  var pl2=new THREE.PointLight(0x9988ff,0.3,30); pl2.position.set(-10,-5,-10); scene.add(pl2);
+  scene.add(new THREE.DirectionalLight(0xffffff,0.5));
+
+  // Stars
+  var sg=new THREE.BufferGeometry(), sp=new Float32Array(600*3), sc=new Float32Array(600*3);
+  for(var i=0;i<600;i++){ sp[i*3]=(Math.random()-0.5)*30; sp[i*3+1]=(Math.random()-0.5)*20; sp[i*3+2]=(Math.random()-0.5)*20-5; sc[i*3]=0.7+Math.random()*0.3; sc[i*3+1]=0.5+Math.random()*0.2; sc[i*3+2]=0.8+Math.random()*0.3; }
+  sg.setAttribute("position",new THREE.BufferAttribute(sp,3)); sg.setAttribute("color",new THREE.BufferAttribute(sc,3));
+  stars=new THREE.Points(sg,new THREE.PointsMaterial({size:0.04,vertexColors:true,transparent:true,opacity:0.8,blending:THREE.AdditiveBlending,depthWrite:false}));
+  scene.add(stars);
+
+  // Hearts
+  var hg=new THREE.BufferGeometry(), hp=new Float32Array(40*3);
+  for(var i=0;i<40;i++){ hp[i*3]=(Math.random()-0.5)*25; hp[i*3+1]=(Math.random()-0.5)*15; hp[i*3+2]=(Math.random()-0.5)*15-3; }
+  hg.setAttribute("position",new THREE.BufferAttribute(hp,3));
+  hearts=new THREE.Points(hg,new THREE.PointsMaterial({size:0.12,color:0xff6b9d,transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false}));
+  scene.add(hearts);
+
+  // Photo cards
+  cardGroups=[]; planeMats=[];
+  PHOTOS.forEach(function(photo,i){
+    var g=new THREE.Group();
+    // Box
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(CARD_W,CARD_H,CARD_D),new THREE.MeshStandardMaterial({color:0x1a0a2e,roughness:0.25,metalness:0.15})));
+    // Front face
+    var pt=generatePlaceholderTexture(i,photo.accent);
+    var pm=new THREE.MeshBasicMaterial({map:pt,toneMapped:false});
+    var p=new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.92,CARD_H*0.92),pm);
+    p.position.z=CARD_D/2+0.005; g.add(p); planeMats.push(pm);
+    // Back face (mirrored)
+    var bp=new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.92,CARD_H*0.92),pm);
+    bp.position.z=-CARD_D/2-0.005; bp.rotation.y=Math.PI; g.add(bp);
+    // Frame + glow
+    var frameGroup=new THREE.Group();
+    var gm=new THREE.MeshBasicMaterial({color:photo.accent,transparent:true,opacity:0.08,side:THREE.DoubleSide,depthWrite:false,depthTest:true});
+    var gl=new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.93,CARD_H*0.93),gm); gl.position.z=CARD_D/2+0.01; frameGroup.add(gl);
+    var el=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CARD_W*1.02,CARD_H*1.02,CARD_D*1.1)),new THREE.LineBasicMaterial({color:new THREE.Color(photo.accent).multiplyScalar(0.25)})); frameGroup.add(el);
+    g.add(frameGroup);
+    g.userData={photo:photo,glowMat:gm,edgeLine:el,planeMat:pm,planeMesh:p,backPlaneMesh:bp,frameGroup:frameGroup,targetPos:new THREE.Vector3(),targetRot:new THREE.Vector3(),targetScl:0.8,hovered:false,selected:false};
+    scene.add(g); cardGroups.push(g);
+  });
+
+  // Async texture loading
+  var loaded=0;
+  PHOTOS.forEach(function(photo,i){
+    loadPhotoTexture(photo.url,i,photo.accent).then(function(tex){
+      if(planeMats[i]){ planeMats[i].map=tex; planeMats[i].needsUpdate=true; }
+      if(tex.userData&&tex.userData.imgW&&cardGroups[i]){
+        var imgRatio=tex.userData.imgW/tex.userData.imgH, cardRatio=(CARD_W*0.92)/(CARD_H*0.92);
+        var sx=1,sy=1;
+        if(imgRatio>cardRatio) sx=imgRatio/cardRatio; else sy=cardRatio/imgRatio;
+        var pw=cardGroups[i].userData.planeMesh; if(pw) pw.scale.set(sx,sy,1);
+        var bw=cardGroups[i].userData.backPlaneMesh; if(bw) bw.scale.set(sx,sy,1);
+        var fg=cardGroups[i].userData.frameGroup; if(fg) fg.scale.set(sx,sy,1);
+      }
+      loaded++; if(loaded>=PHOTOS.length) hideLoading();
+    });
+    loadPhotoImage(photo.url,i,photo.accent).then(function(d){ photo._modalSrc=d; });
+  });
+  setTimeout(hideLoading,5000);
+
+  updateFormation(); updateUI(); animate();
+
+  // Events
+  renderer.domElement.addEventListener("click",function(e){
+    mouse.x=(e.clientX/window.innerWidth)*2-1; mouse.y=-(e.clientY/window.innerHeight)*2+1;
+    raycaster.setFromCamera(mouse,camera);
+    var hits=raycaster.intersectObjects(cardGroups,true);
+    if(hits.length>0){ var o=hits[0].object; while(o&&!cardGroups.includes(o)) o=o.parent; if(o&&cardGroups.includes(o)){ openModal(o.userData.photo); return; } }
+    if(modalPhoto) closeModal();
+  });
+  renderer.domElement.addEventListener("mousemove",function(e){
+    mouse.x=(e.clientX/window.innerWidth)*2-1; mouse.y=-(e.clientY/window.innerHeight)*2+1;
+    raycaster.setFromCamera(mouse,camera);
+    var hits=raycaster.intersectObjects(cardGroups,true);
+    cardGroups.forEach(function(g){ g.userData.hovered=false; g.userData.glowMat.opacity=0.08; g.userData.edgeLine.material.color.set(new THREE.Color(g.userData.photo.accent).multiplyScalar(0.25)); });
+    if(hits.length>0){ var o=hits[0].object; while(o&&!cardGroups.includes(o)) o=o.parent; if(o&&cardGroups.includes(o)){ o.userData.hovered=true; o.userData.glowMat.opacity=0.25; o.userData.edgeLine.material.color.set(new THREE.Color("#ffd700").multiplyScalar(0.7)); } }
+    renderer.domElement.style.cursor=hits.length>0?"pointer":"grab";
+  });
+}
+
+// Bind UI events
+document.getElementById("modal-close").addEventListener("click",function(e){ e.stopPropagation(); closeModal(); });
+document.getElementById("modal").addEventListener("click",function(e){ if(e.target===e.currentTarget) closeModal(); });
+document.getElementById("music-btn").addEventListener("click",function(){ isMusicOn=!isMusicOn; document.getElementById("music-btn").textContent=isMusicOn?"馃攰":"馃攪"; });
+document.getElementById("prev-btn").addEventListener("click",function(){ setChapter(currentChapter-1); resetAutoTimer(); });
+document.getElementById("next-btn").addEventListener("click",function(){ setChapter(currentChapter+1); resetAutoTimer(); });
+document.getElementById("auto-btn").addEventListener("click",function(){ isAutoPlaying=!isAutoPlaying; resetAutoTimer(); updateUI(); });
+document.addEventListener("keydown",function(e){ if(e.key==="ArrowLeft"){ setChapter(currentChapter-1); resetAutoTimer(); } if(e.key==="ArrowRight"){ setChapter(currentChapter+1); resetAutoTimer(); } if(e.key==="Escape"&&modalPhoto) closeModal(); });
+window.addEventListener("resize",function(){ if(renderer){ renderer.setSize(window.innerWidth,window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); } });
+
+// Boot
+console.log("[鐩稿唽] 姝ｅ湪浠?IndexedDB 鍔犺浇鏁版嵁...");
+loadFromDB().then(function(custom){
+  if(custom&&custom.photos&&custom.photos.length>0){
+    PHOTOS=custom.photos.map(function(p,i){ return {id:i,url:p.dataUrl||"",caption:p.caption||"",accent:p.accent||"#ff9999",_isCustom:true}; });
+    console.log("%c鉁?宸插姞杞?"+PHOTOS.length+" 寮犺嚜瀹氫箟鐓х墖 (IndexedDB)","color:#ff69b4;font-size:16px");
+  }else{
+    PHOTOS=Array.from({length:24},function(_,i){ return {id:i,url:"https://picsum.photos/seed/love"+i+"/400/600",caption:CAPTIONS[i],accent:ACCENTS[i]}; });
+    console.log("%c馃摬 浣跨敤榛樿鍗犱綅鐓х墖 ("+PHOTOS.length+" 寮?","color:#aaa;font-size:14px");
+  }
+  CHAPTERS=(custom&&custom.settings&&custom.settings.chapters&&custom.settings.chapters.length>0)?custom.settings.chapters:DEFAULT_CHAPTERS;
+  if(custom&&custom.settings){
+    if(custom.settings.logo) document.getElementById("logo").textContent=custom.settings.logo;
+    if(custom.settings.chapterDuration) CHAPTER_DURATION=custom.settings.chapterDuration;
+  }
+  document.getElementById("photo-count-badge").textContent=PHOTOS.length+" 寮犵収鐗?路 "+CHAPTERS.length+" 绔?;
+  console.log("[鐩稿唽] 鍒濆鍖?3D 鍦烘櫙...");
+  initScene();
+}).catch(function(e){
+  console.warn("[鐩稿唽] IndexedDB 璇诲彇澶辫触锛屼娇鐢ㄩ粯璁ゆ暟鎹?,e);
+  PHOTOS=Array.from({length:24},function(_,i){ return {id:i,url:"https://picsum.photos/seed/love"+i+"/400/600",caption:CAPTIONS[i],accent:ACCENTS[i]}; });
+  CHAPTERS=DEFAULT_CHAPTERS;
+  document.getElementById("photo-count-badge").textContent=PHOTOS.length+" 寮犵収鐗?路 "+CHAPTERS.length+" 绔?;
+  initScene();
+});
+</script>
+</body>
+</html>

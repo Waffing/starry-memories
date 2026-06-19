@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0015">
+<title>梦幻 AI 相册 — WXY</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;font-family:"Georgia","Noto Serif SC","PingFang SC","Microsoft YaHei",serif;-webkit-font-smoothing:antialiased;background:#0a0015;color:#fff}
+canvas{display:block;position:fixed;top:0;left:0;z-index:0}
+#logo{position:fixed;top:1rem;left:1.5rem;color:rgba(255,255,255,0.5);font-size:0.8rem;letter-spacing:0.3em;font-weight:200;z-index:20}
+#chapter-label{position:fixed;top:3.5rem;left:1.5rem;color:rgba(255,255,255,0.35);font-size:0.7rem;letter-spacing:0.2em;z-index:20}
+#music-btn{position:fixed;top:1rem;right:1rem;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.05);color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);z-index:20;transition:all 0.3s}
+#music-btn:hover{background:rgba(255,255,255,0.15)}#admin-btn{position:fixed;top:1rem;right:3.5rem;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:20;transition:all 0.3s;text-decoration:none}#admin-btn:hover{background:rgba(255,105,180,0.2);border-color:rgba(255,105,180,0.4);color:#fff}#photo-count-badge{position:fixed;bottom:1rem;right:1rem;z-index:20;color:rgba(255,255,255,0.3);font-size:0.65rem;letter-spacing:0.1em;pointer-events:none}
+#chapter-text{position:fixed;bottom:18%;left:50%;transform:translateX(-50%);text-align:center;z-index:20}
+#chapter-text .line{color:#fff;font-size:clamp(1rem,3vw,1.8rem);font-weight:300;letter-spacing:0.15em;text-shadow:0 0 30px rgba(255,105,180,0.6),0 0 60px rgba(255,105,180,0.3);margin:0.3em 0;opacity:0;transform:translateY(20px);transition:opacity 0.8s,transform 0.8s}
+#chapter-text .line.show{opacity:1;transform:translateY(0)}
+#controls{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:0.8rem;z-index:20}
+#progress-bar{width:clamp(200px,40vw,400px);height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden}
+#progress-fill{height:100%;background:linear-gradient(90deg,#ff69b4,#ffd700);border-radius:2px;transition:width 0.3s linear}
+#chap-dots{display:flex;gap:0.6rem;align-items:center}
+#chap-dots button.nav-arrow{background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1.2rem;padding:0.3rem;transition:color 0.3s}
+#chap-dots button.nav-arrow:hover{color:#fff}
+#chap-dots .dot{border:none;border-radius:5px;cursor:pointer;transition:all 0.3s;height:10px}
+#chap-dots .dot.active{width:32px;background:linear-gradient(135deg,#ff69b4,#ffd700)}
+#chap-dots .dot.inactive{width:10px;background:rgba(255,255,255,0.2)}
+#chap-dots .dot.inactive:hover{background:rgba(255,255,255,0.4)}
+#auto-btn{background:none;border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:0.7rem;padding:0.2rem 0.8rem;letter-spacing:0.05em;transition:all 0.3s}
+#auto-btn:hover{color:#fff;border-color:rgba(255,255,255,0.3)}
+#vignette{position:fixed;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,transparent 50%,rgba(10,0,30,0.5) 100%)}
+#modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(5,0,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);opacity:0;pointer-events:none;transition:opacity 0.4s}
+#modal.open{opacity:1;pointer-events:auto}
+#modal-inner{position:relative;max-width:min(90vw,420px);max-height:85vh;transform:scale(0.8);transition:transform 0.5s}
+#modal.open #modal-inner{transform:scale(1)}
+#modal-img{width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:16px;box-shadow:0 0 40px rgba(255,105,180,0.27),0 0 80px rgba(255,105,180,0.13),0 20px 60px rgba(0,0,0,0.5);border:2px solid rgba(255,105,180,0.33)}
+#modal-caption{color:#fff;text-align:center;margin-top:1rem;font-size:clamp(0.9rem,2.5vw,1.2rem);font-weight:300;letter-spacing:0.1em;text-shadow:0 0 20px rgba(255,105,180,0.5);opacity:0;transform:translateY(10px);transition:all 0.6s 0.3s}
+#modal.open #modal-caption{opacity:1;transform:translateY(0)}
+#modal-close{position:fixed;top:1.5rem;right:1.5rem;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.05);color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:110}
+#modal-close:hover{background:rgba(255,255,255,0.2)}
+#loading{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:#0a0015;transition:opacity 0.6s;pointer-events:none}
+#loading.hidden{opacity:0}
+#loading-text{color:rgba(255,255,255,0.6);font-size:1rem;letter-spacing:0.2em;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
+</style>
+</head>
+<body>
+<div id="logo">WXY</div>
+<div id="chapter-label"></div>
+<a id="admin-btn" href="admin.html" title="后台管理" target="_blank">⚙</a><button id="music-btn" title="音乐">🔇</button><div id="photo-count-badge"></div>
+<div id="chapter-text"><p class="line"></p><p class="line"></p></div>
+<div id="controls">
+  <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+  <div id="chap-dots">
+    <button class="nav-arrow" id="prev-btn">◀</button>
+    <div id="dots-container"></div>
+    <button class="nav-arrow" id="next-btn">▶</button>
+  </div>
+  <button id="auto-btn">▶ 自动播放</button>
+</div>
+<div id="vignette"></div>
+<div id="modal">
+  <div id="modal-inner">
+    <img id="modal-img" src="" alt="">
+    <p id="modal-caption"></p>
+  </div>
+  <button id="modal-close">✕</button>
+</div>
+<div id="loading"><span id="loading-text">✦ 正在为你准备星河 ✦</span></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+
+// ==================== 配置 ====================
+const LOGO = "WXY";
+var CHAPTER_DURATION = 5000;
+
+// ============================================================
+// 🔧 【照片配置】在这里替换为你的真实照片
+//    把 url 改成你的照片路径即可：
+//    - 本地相对路径: "photos/01.jpg"
+//    - 在线 URL:     "https://example.com/photo.jpg"
+//    当前使用 picsum 随机图片作为预览占位
+// ============================================================
+// ==================== IndexedDB 读取 ====================
+function loadFromDB() {
+  return new Promise(function(resolve) {
+    var r = indexedDB.open("dreamy_album_db", 1);
+    r.onupgradeneeded = function(e) { if (!e.target.result.objectStoreNames.contains("album_data")) e.target.result.createObjectStore("album_data"); };
+    r.onsuccess = function(e) {
+      var db = e.target.result;
+      var tx = db.transaction("album_data", "readonly");
+      var req = tx.objectStore("album_data").get("data");
+      req.onsuccess = function() { resolve(req.result); db.close(); };
+      req.onerror = function() { resolve(null); db.close(); };
+    };
+    r.onerror = function() { resolve(null); };
+  });
+}
+
+// ==================== 照片 & 章节配置 ====================
+var PHOTOS, CHAPTERS, CHAPTER_DURATION = 5000;
+
+// 默认数据
+function getDefaultPhotos() {
+  return Array.from({length:24}, function(_, i) { return {
+    id: i,
+    url: "https://picsum.photos/seed/love"+i+"/400/600",
+    caption: ["第一次遇见你，世界都亮了","你的笑容，是我见过最美的风景","那一瞬间，我就知道是你了","手牵手走过每一条街","我们的秘密基地","你认真时候的样子，我最喜欢","一起吃过的每一顿饭","阳光刚好，你也刚好","那次旅行，我们看了好多星星","你的侧脸，像一幅画","冬天有你就不再寒冷","因为有你，每一天都是节日","你睡着了，世界都安静了","我们的第一场电影","那些说不完的话题","每张照片都是时间的情书","你的眼睛里有星辰大海","和你在一起的每一天都值得纪念","你是我写过最美的诗","一起数过的星星","你的温度，我永远记得","想和你一起慢慢变老","最美的不是风景，而是身边的你","余生请多指教"][i],
+    accent: ["#ff9999","#ffb3cc","#c9a0dc","#ffcc99","#99ccff","#ffaaaa","#ffd700","#ff69b4","#dda0dd","#f0e68c","#87ceeb","#ffb6c1","#b0c4de","#e6e6fa","#ffe4e1","#ffc0cb","#add8e6","#fff0f5","#d8bfd8","#f5deb3","#ffdab9","#e0ffff","#fffacd","#ffb6c1"][i]
+  };});
+}
+
+function getDefaultChapters() {
+  return [
+    { title:"星河初遇", texts:["把我们的回忆","放进一片星河"], formation:"cloud" },
+    { title:"光影守护", texts:["愿你眼中的光","永远有我守护"], formation:"wall" },
+    { title:"时光情书", texts:["每一张照片","都是时间写给我们的情书"], formation:"heartRing" },
+    { title:"旋转回忆", texts:["我们的故事","像星辰环绕不息"], formation:"orbitCircle" },
+    { title:"浪漫长廊", texts:["走过这条","属于我们的长廊"], formation:"waveBridge" },
+    { title:"螺旋上升", texts:["我们的爱","盘旋而上直至永恒"], formation:"spiral" },
+    { title:"钻石星辰", texts:["你是我生命里","最闪耀的钻石"], formation:"diamond" },
+    { title:"十字誓约", texts:["以爱为名","许下不变的誓约"], formation:"cross" },
+    { title:"时空漩涡", texts:["无论时间如何流转","我的心始终向你"], formation:"vortex" },
+    { title:"永远", texts:["生日快乐 / 纪念日快乐","我一直都在 💖"], formation:"finale" },
+  ];
+}
+// 异步加载 IndexedDB 数据后初始化场景
+loadFromDB().then(function(_custom) {
+  if (_custom && _custom.photos && _custom.photos.length > 0) {
+    PHOTOS = _custom.photos.map(function(p, i) { return { id: i, url: p.dataUrl || "", caption: p.caption || "", accent: p.accent || "#ff9999", _isCustom: true }; });
+    console.log("%c✨ 已加载 " + PHOTOS.length + " 张自定义照片 (IndexedDB)", "color:#ff69b4;font-size:16px");
+  } else {
+    PHOTOS = getDefaultPhotos();
+    console.log("%c📷 使用默认占位照片 (" + PHOTOS.length + " 张)", "color:#aaa;font-size:14px");
+  }
+
+  if (_custom && _custom.settings && _custom.settings.chapters && _custom.settings.chapters.length > 0) {
+    CHAPTERS = _custom.settings.chapters;
+  } else {
+    CHAPTERS = getDefaultChapters();
+  }
+
+  if (_custom && _custom.settings) {
+    if (_custom.settings.logo) document.getElementById("logo").textContent = _custom.settings.logo;
+    if (_custom.settings.chapterDuration) CHAPTER_DURATION = _custom.settings.chapterDuration;
+  }
+
+  document.getElementById("photo-count-badge").textContent = PHOTOS.length + " 张照片 · " + CHAPTERS.length + " 章";
+
+  // 启动场景
+  initScene();
+});
+
+var CARD_W, CARD_H, CARD_D, cardGroups, planeMats;
+var scene, camera, renderer, stars, hearts;
+var currentChapter = 0, isAutoPlaying = true, isMusicOn = false, chapterStartTime = Date.now(), modalPhoto = null;
+var raycaster, mouse;
+
+function initScene() {
+
+
+// ==================== 占位图纹理（兜底用） ====================
+function generatePlaceholderTexture(index, accentHex) {
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = Math.round(size * 1.5);
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, c.width, c.height);
+  const colors = [["#1a0033","#330033"],["#2d0033","#1a0033"],["#330022","#220033"],["#2a1a33","#1a0a2e"],["#1a2a33","#0a1a2e"],["#331a2a","#2e0a1a"]];
+  const [c1,c2] = colors[index % 6];
+  grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, c.width, c.height);
+  const rg = ctx.createRadialGradient(c.width*0.5, c.height*0.4, 10, c.width*0.5, c.height*0.4, c.width*0.6);
+  rg.addColorStop(0, accentHex+"44"); rg.addColorStop(1, "transparent");
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = accentHex+"33"; ctx.font = c.width*0.15+"px serif"; ctx.textAlign = "center";
+  ctx.fillText("\u2665", c.width*0.25, c.height*0.3);
+  ctx.fillText("\u2726", c.width*0.75, c.height*0.7);
+  ctx.fillText("\u2665", c.width*0.6, c.height*0.85);
+  ctx.fillStyle = "rgba(255,255,255,0.15)"; ctx.font = c.width*0.12+"px Georgia, serif";
+  ctx.fillText(""+(index+1), c.width*0.5, c.height*0.5);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// ==================== 纹理加载：优先 URL → 兜底占位图 ====================
+function loadPhotoTexture(url, index, accentHex) {
+  // 如果是 data URL（后台本地上传的照片），直接创建纹理
+  if (url && url.startsWith("data:")) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        c.getContext("2d").drawImage(img, 0, 0);
+        const tex = new THREE.CanvasTexture(c);
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.generateMipmaps = true;
+        tex.userData = { imgW: img.width, imgH: img.height };
+        tex.colorSpace = THREE.SRGBColorSpace;
+        console.log("[纹里] 照片#" + (index+1) + " 已加载 (" + img.width + "x" + img.height + ")");
+        resolve(tex);
+      };
+      img.onerror = () => {
+        console.warn("[纹里] 照片#" + (index+1) + " 加载失败，使用占位图");
+        resolve(generatePlaceholderTexture(index, accentHex));
+      };
+      img.src = url;
+    });
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const timeout = setTimeout(() => resolve(generatePlaceholderTexture(index, accentHex)), 3000);
+    img.onload = () => {
+      clearTimeout(timeout);
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      c.getContext("2d").drawImage(img, 0, 0);
+        tex.userData = { imgW: img.width, imgH: img.height };
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      resolve(tex);
+    };
+    img.onerror = () => { clearTimeout(timeout); resolve(generatePlaceholderTexture(index, accentHex)); };
+    img.src = url;
+  });
+}
+
+function loadPhotoImage(url, index, accentHex) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const timeout = setTimeout(() => {
+      resolve(generatePlaceholderTexture(index, accentHex).source.data.toDataURL());
+    }, 3000);
+    img.onload = () => { clearTimeout(timeout); resolve(url); };
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(generatePlaceholderTexture(index, accentHex).source.data.toDataURL());
+    };
+    img.src = url;
+  });
+}
+
+// ==================== 队形位置计算 ====================
+function getFormationPositions(type, count) {
+  const results = [];
+  const seed = (i) => Math.sin(i * 127.1 + 311.7) * 43758.5453 % 1;
+  switch(type) {
+    case "cloud": {
+      const r = 5;
+      for (let i=0;i<count;i++) {
+        const phi = Math.acos(2*seed(i*3)-1), theta = seed(i*3+1)*Math.PI*2, rad = r*(0.5+seed(i*3+2)*0.5);
+        results.push({pos:[rad*Math.sin(phi)*Math.cos(theta),rad*Math.sin(phi)*Math.sin(theta),rad*Math.cos(phi)],rot:[(seed(i*7)-0.5)*0.5,(seed(i*7+1)-0.5)*0.5,(seed(i*7+2)-0.5)*0.3],scl:0.7+seed(i*5)*0.6});
+      }
+      break;
+    }
+    case "wall": {
+      const cols=6, sx=CARD_W*1.2, sy=CARD_H*1.15, tw=(cols-1)*sx, rows=Math.ceil(count/cols), th=(rows-1)*sy;
+      for (let i=0;i<count;i++) { const col=i%cols, row=Math.floor(i/cols); results.push({pos:[col*sx-tw/2,-(row*sy-th/2),0],rot:[0,0,0],scl:0.85}); }
+      break;
+    }
+    case "heartRing": {
+      const s=4;
+      for (let i=0;i<count;i++) {
+        const t=(i/count)*Math.PI*2, x=16*Math.pow(Math.sin(t),3), y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+        const dx=48*Math.pow(Math.sin(t),2)*Math.cos(t), dy=-13*Math.sin(t)+10*Math.sin(2*t)+6*Math.sin(3*t)+4*Math.sin(4*t);
+        results.push({pos:[x/16*s,y/16*s,(i%3-1)*0.5],rot:[0,0,-Math.atan2(dy,dx)+Math.PI/2],scl:0.7});
+      }
+      break;
+    }
+    case "orbitCircle": {
+      const r=5;
+      for (let i=0;i<count;i++) { const a=(i/count)*Math.PI*2; results.push({pos:[Math.cos(a)*r,0,Math.sin(a)*r],rot:[0,-a+Math.PI,0],scl:0.85}); }
+      break;
+    }
+    case "waveBridge": {
+      const len=10;
+      for (let i=0;i<count;i++) { const t=(i/(count-1))*len-len/2; results.push({pos:[Math.cos(t*0.3)*3,Math.sin(t*1.2)*2,t],rot:[0,-Math.PI/2+Math.cos(t*0.3)*0.3,0],scl:0.8}); }
+      break;
+    }
+    case "finale": {
+      const s=5;
+      for (let i=0;i<count;i++) { const t=(i/count)*Math.PI*2+Math.PI, x=16*Math.pow(Math.sin(t),3), y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t); results.push({pos:[x/16*s,y/16*s,(i%3-1)*0.3],rot:[0,0,0],scl:0.75}); }
+      break;
+    }
+    case "spiral": {
+      const h = 8, r2 = 4;
+      for (let i=0;i<count;i++) {
+        const t = i / count, a = t * Math.PI * 6, rad = r2 * (0.3 + t * 0.7);
+        results.push({pos:[Math.cos(a)*rad, -h/2 + t*h, Math.sin(a)*rad], rot:[0, -a + Math.PI/2, 0], scl:0.65 + t * 0.35});
+      }
+      break;
+    }
+    case "diamond": {
+      const n = Math.ceil(Math.sqrt(count)), sp = 1.3;
+      for (let i=0;i<count;i++) {
+        const row = Math.floor(i / n), col = i % n;
+        const cx = (col - (n-1)/2) * sp, cy = (row - (n-1)/2) * sp;
+        results.push({pos:[cx, -cy * 0.7, Math.abs(cx)*0.3 + Math.abs(cy)*0.3], rot:[0,0,0], scl:0.75});
+      }
+      break;
+    }
+    case "cross": {
+      const span = 8, half = Math.floor(count / 2);
+      for (let i=0;i<count;i++) {
+        if (i < half) { const t = (i / (half-1)) * span - span/2; results.push({pos:[t, 0, 0], rot:[0,0,0], scl:0.8}); }
+        else { const t = ((i-half) / (count-half-1)) * span - span/2; results.push({pos:[0, -t, 0], rot:[0,0,0], scl:0.8}); }
+      }
+      break;
+    }
+    case "vortex": {
+      const vh = 8, maxR = 5;
+      for (let i=0;i<count;i++) {
+        const t = i / count, a = t * Math.PI * 8, rad = maxR * (1 - t) * 0.8 + 0.5;
+        results.push({pos:[Math.cos(a)*rad, -vh/2 + t*vh, Math.sin(a)*rad], rot:[(Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, 0], scl:0.6 + t * 0.4});
+      }
+      break;
+    }
+  }
+  return results;
+}
+
+// ==================== Three.js 场景 ====================
+const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,50);
+camera.position.set(0,0,10);
+
+scene.add(new THREE.AmbientLight(0x442244, 0.3));
+const pl1 = new THREE.PointLight(0xff99cc, 0.5, 30); pl1.position.set(10,10,10); scene.add(pl1);
+const pl2 = new THREE.PointLight(0x9988ff, 0.3, 30); pl2.position.set(-10,-5,-10); scene.add(pl2);
+scene.add(new THREE.DirectionalLight(0xffffff, 0.5));
+
+// 星点粒子
+const starGeo = new THREE.BufferGeometry();
+const starPos = new Float32Array(600*3), starCol = new Float32Array(600*3);
+for (let i=0;i<600;i++) {
+  starPos[i*3]=(Math.random()-0.5)*30; starPos[i*3+1]=(Math.random()-0.5)*20; starPos[i*3+2]=(Math.random()-0.5)*20-5;
+  starCol[i*3]=0.7+Math.random()*0.3; starCol[i*3+1]=0.5+Math.random()*0.2; starCol[i*3+2]=0.8+Math.random()*0.3;
+}
+starGeo.setAttribute("position",new THREE.BufferAttribute(starPos,3));
+starGeo.setAttribute("color",new THREE.BufferAttribute(starCol,3));
+const stars = new THREE.Points(starGeo,new THREE.PointsMaterial({size:0.04,vertexColors:true,transparent:true,opacity:0.8,blending:THREE.AdditiveBlending,depthWrite:false}));
+scene.add(stars);
+
+// 爱心粒子
+const heartGeo = new THREE.BufferGeometry();
+const heartPosA = new Float32Array(40*3);
+for (let i=0;i<40;i++) { heartPosA[i*3]=(Math.random()-0.5)*25; heartPosA[i*3+1]=(Math.random()-0.5)*15; heartPosA[i*3+2]=(Math.random()-0.5)*15-3; }
+heartGeo.setAttribute("position",new THREE.BufferAttribute(heartPosA,3));
+const hearts = new THREE.Points(heartGeo,new THREE.PointsMaterial({size:0.12,color:0xff6b9d,transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false}));
+scene.add(hearts);
+
+// ==================== 照片卡片（异步加载真实纹理） ====================
+const cardGroups = [];
+const planeMats = [];
+
+PHOTOS.forEach((photo, i) => {
+  const group = new THREE.Group();
+
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(CARD_W, CARD_H, CARD_D),
+    new THREE.MeshStandardMaterial({color:0x1a0a2e,roughness:0.25,metalness:0.15,transparent:true,opacity:0.9})
+  );
+  group.add(box);
+
+  const placeholderTex = generatePlaceholderTexture(i, photo.accent);
+  const planeMat = new THREE.MeshBasicMaterial({map:placeholderTex, toneMapped:false});
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.92, CARD_H*0.92), planeMat);
+  plane.position.z = CARD_D/2 + 0.002;
+  group.add(plane);
+  planeMats.push(planeMat);
+  group.userData.planeMesh = plane;
+
+  // 背面照片（镜像）
+  var backPlane = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.92, CARD_H*0.92), planeMat);
+  backPlane.position.z = -CARD_D/2 - 0.002;
+  backPlane.rotation.y = Math.PI;
+  group.add(backPlane);
+  group.userData.backPlaneMesh = backPlane;
+
+  const glowMat = new THREE.MeshBasicMaterial({color:photo.accent,transparent:true,opacity:0.08,side:THREE.DoubleSide,depthWrite:false});
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W*0.93, CARD_H*0.93), glowMat);
+  glow.position.z = CARD_D/2 + 0.003;
+  group.add(glow);
+
+  const edgeLine = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(CARD_W*1.02,CARD_H*1.02,CARD_D*1.1)),
+    new THREE.LineBasicMaterial({color:photo.accent,transparent:true,opacity:0.25})
+  );
+  group.add(edgeLine);
+
+  group.userData = { photo, glowMat, edgeLine, planeMat, targetPos:new THREE.Vector3(), targetRot:new THREE.Vector3(), targetScl:0.8, hovered:false, selected:false };
+  scene.add(group);
+  cardGroups.push(group);
+});
+
+// 异步加载真实纹理
+let texturesLoaded = 0;
+PHOTOS.forEach((photo, i) => {
+  loadPhotoTexture(photo.url, i, photo.accent).then(tex => {
+    if (planeMats[i]) { planeMats[i].map = tex; planeMats[i].needsUpdate = true; }
+    // 根据照片实际比例调整平面缩放，避免拉伸变形
+    if (tex.userData && tex.userData.imgW && cardGroups[i]) {
+      var imgRatio = tex.userData.imgW / tex.userData.imgH;
+      var cardRatio = (CARD_W * 0.92) / (CARD_H * 0.92);
+      var pw = cardGroups[i].userData.planeMesh;
+      if (pw) {
+        var sx = 1, sy = 1;
+        if (imgRatio > cardRatio) {
+          sy = cardRatio / imgRatio;
+        } else {
+          sx = imgRatio / cardRatio;
+        }
+        pw.scale.set(sx, sy, 1);
+        // 背面镜像同步缩放
+        var bw = cardGroups[i].userData.backPlaneMesh;
+        if (bw) bw.scale.set(sx, sy, 1);
+      }
+    }
+    texturesLoaded++;
+    if (texturesLoaded >= PHOTOS.length) hideLoading();
+  });
+  loadPhotoImage(photo.url, i, photo.accent).then(dataUrl => { photo._modalSrc = dataUrl; });
+});
+
+function hideLoading() {
+  document.getElementById("loading").classList.add("hidden");
+  setTimeout(() => { const el = document.getElementById("loading"); if (el) el.style.display = "none"; }, 600);
+}
+setTimeout(hideLoading, 5000);
+
+// ==================== 相机目标 ====================
+const cameraTargets = {
+  cloud:{pos:[0,0,10],look:[0,0,0]}, wall:{pos:[0,0.5,8],look:[0,0.5,0]},
+  heartRing:{pos:[0,1,9],look:[0,0.5,0]}, orbitCircle:{pos:[0,3,8],look:[0,0,0]},
+  waveBridge:{pos:[0,1.5,0],look:[0,0,-5]},
+  spiral:{pos:[0,0,10],look:[0,0,0]},
+  diamond:{pos:[0,0,10],look:[0,0,0]},
+  cross:{pos:[0,0,10],look:[0,0,0]},
+  vortex:{pos:[0,0,10],look:[0,0,0]},
+  finale:{pos:[0,0.5,10],look:[0,0.5,0]},
+};
+
+// ==================== 状态管理 ====================
+let currentChapter = 0, isAutoPlaying = true, isMusicOn = false, chapterStartTime = Date.now(), modalPhoto = null;
+
+function updateFormation() {
+  const positions = getFormationPositions(CHAPTERS[currentChapter].formation, PHOTOS.length);
+  cardGroups.forEach((g,i) => {
+    const t = positions[i] || positions[0];
+    g.userData.targetPos.set(t.pos[0],t.pos[1],t.pos[2]);
+    g.userData.targetRot.set(t.rot[0],t.rot[1],t.rot[2]);
+    g.userData.targetScl = t.scl;
+  });
+}
+
+function setChapter(idx) {
+  currentChapter = (idx + CHAPTERS.length) % CHAPTERS.length;
+  chapterStartTime = Date.now();
+  updateFormation();
+  updateUI();
+}
+
+function updateUI() {
+  const ch = CHAPTERS[currentChapter];
+  document.getElementById("chapter-label").textContent = ch.title;
+  const lines = document.getElementById("chapter-text").querySelectorAll(".line");
+  lines.forEach(l => l.classList.remove("show"));
+  ch.texts.forEach((t,i) => { if (lines[i]) lines[i].textContent = t; });
+  for (let i=ch.texts.length;i<lines.length;i++) { if (lines[i]) lines[i].textContent = ""; }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      ch.texts.forEach((_,i) => { setTimeout(() => { if (lines[i]) lines[i].classList.add("show"); }, i*500+100); });
+    });
+  });
+  const dc = document.getElementById("dots-container");
+  dc.innerHTML = "";
+  CHAPTERS.forEach((c,i) => {
+    const dot = document.createElement("button");
+    dot.className = i===currentChapter ? "dot active" : "dot inactive";
+    dot.onclick = () => { setChapter(i); resetAutoTimer(); };
+    dc.appendChild(dot);
+  });
+  document.getElementById("auto-btn").textContent = isAutoPlaying ? "\u23F8 自动播放中" : "\u25B6 自动播放";
+}
+
+function resetAutoTimer() { chapterStartTime = Date.now(); }
+
+// ==================== 弹窗 ====================
+function openModal(photo) {
+  modalPhoto = photo;
+  document.getElementById("modal-caption").textContent = photo.caption;
+  document.getElementById("modal").classList.add("open");
+  if (photo._modalSrc) {
+    document.getElementById("modal-img").src = photo._modalSrc;
+  } else {
+    document.getElementById("modal-img").src = generatePlaceholderTexture(photo.id, photo.accent).source.data.toDataURL();
+  }
+}
+function closeModal() { document.getElementById("modal").classList.remove("open"); modalPhoto = null; }
+
+// ==================== 交互 ====================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener("click", (e) => {
+  mouse.x = (e.clientX/window.innerWidth)*2-1;
+  mouse.y = -(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(cardGroups, true);
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (obj && !cardGroups.includes(obj)) obj = obj.parent;
+    if (obj && cardGroups.includes(obj)) { openModal(obj.userData.photo); return; }
+  }
+  if (modalPhoto) closeModal();
+});
+
+document.getElementById("modal-close").addEventListener("click",(e)=>{e.stopPropagation();closeModal();});
+document.getElementById("modal").addEventListener("click",(e)=>{if(e.target===e.currentTarget)closeModal();});
+document.getElementById("music-btn").addEventListener("click",()=>{isMusicOn=!isMusicOn;document.getElementById("music-btn").textContent=isMusicOn?"\uD83D\uDD0A":"\uD83D\uDD07";});
+document.getElementById("prev-btn").addEventListener("click",()=>{setChapter(currentChapter-1);resetAutoTimer();});
+document.getElementById("next-btn").addEventListener("click",()=>{setChapter(currentChapter+1);resetAutoTimer();});
+document.getElementById("auto-btn").addEventListener("click",()=>{isAutoPlaying=!isAutoPlaying;resetAutoTimer();updateUI();});
+document.addEventListener("keydown",(e)=>{
+  if (e.key==="ArrowLeft") { setChapter(currentChapter-1); resetAutoTimer(); }
+  if (e.key==="ArrowRight") { setChapter(currentChapter+1); resetAutoTimer(); }
+  if (e.key==="Escape" && modalPhoto) closeModal();
+});
+window.addEventListener("resize",()=>{renderer.setSize(window.innerWidth,window.innerHeight);camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();});
+
+// ==================== 初始化 ====================
+updateFormation();
+updateUI();
+
+// ==================== 渲染循环 ====================
+const clock = new THREE.Clock();
+const targetCamPos = new THREE.Vector3();
+const targetLookAt = new THREE.Vector3();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const lerpF = 1-Math.exp(-dt*3);
+
+  stars.rotation.y += dt*0.02; stars.rotation.x += dt*0.01;
+  hearts.rotation.y += dt*0.04;
+
+  if (isAutoPlaying) {
+    const elapsed = Date.now() - chapterStartTime;
+    document.getElementById("progress-fill").style.width = Math.min(elapsed/CHAPTER_DURATION*100,100)+"%";
+    if (elapsed >= CHAPTER_DURATION) setChapter(currentChapter+1);
+  } else {
+    document.getElementById("progress-fill").style.width = "0%";
+  }
+
+  const ct = cameraTargets[CHAPTERS[currentChapter].formation];
+  targetCamPos.set(...ct.pos); targetLookAt.set(...ct.look);
+  camera.position.lerp(targetCamPos, lerpF);
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const desired = targetLookAt.clone().sub(camera.position).normalize();
+  dir.lerp(desired, lerpF).normalize();
+  camera.lookAt(camera.position.clone().add(dir));
+
+  cardGroups.forEach(g => {
+    const ud = g.userData;
+    g.position.lerp(ud.targetPos, lerpF);
+    g.rotation.x += (ud.targetRot.x - g.rotation.x) * lerpF;
+    g.rotation.y += (ud.targetRot.y - g.rotation.y) * lerpF;
+    g.rotation.z += (ud.targetRot.z - g.rotation.z) * lerpF;
+    const s = ud.targetScl * (ud.hovered?1.12:1) * (ud.selected?0.3:1);
+    g.scale.lerp(new THREE.Vector3(s,s,s), lerpF);
+    if (ud.hovered && !ud.selected) g.position.y += Math.sin(Date.now()*0.004)*0.003;
+  });
+
+  renderer.render(scene, camera);
+}
+
+renderer.domElement.addEventListener("mousemove",(e)=>{
+  mouse.x = (e.clientX/window.innerWidth)*2-1;
+  mouse.y = -(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(cardGroups, true);
+  cardGroups.forEach(g => { g.userData.hovered = false; g.userData.glowMat.opacity = 0.08; g.userData.edgeLine.material.opacity = 0.25; g.userData.edgeLine.material.color.set(g.userData.photo.accent); });
+  if (intersects.length>0) {
+    let obj = intersects[0].object;
+    while (obj && !cardGroups.includes(obj)) obj = obj.parent;
+    if (obj && cardGroups.includes(obj)) {
+      obj.userData.hovered = true;
+      obj.userData.glowMat.opacity = 0.25; obj.userData.edgeLine.material.opacity = 0.7;
+      obj.userData.edgeLine.material.color.set("#ffd700");
+    }
+  }
+  renderer.domElement.style.cursor = intersects.length>0 ? "pointer" : "grab";
+});
+
+}
+initScene();
+</script>
+</body>
+</html>
